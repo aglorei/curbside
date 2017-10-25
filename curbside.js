@@ -47,10 +47,10 @@ class Session {
     this._secret = ''
   }
 
-  get stack ()        { return this._stack }
-  set stack (node_id) { this._stack.push(node_id) }
+  get stack () { return this._stack }
+  set stack (nodeID) { this._stack.push(nodeID) }
 
-  async get_session () {
+  async getSession () {
     const data = await fetch('get-session')
     this.session = data['session']
     this.expire_at = data['expire_at']
@@ -60,15 +60,15 @@ class Session {
     })
   }
 
-  async get_node (node_id) {
+  async getNode (nodeID) {
     let data
     let success = false
 
     while (!success) {
       try {
-        data = await fetch(node_id, this.headers)
+        data = await fetch(nodeID, this.headers)
         success = true
-      } catch(e) {
+      } catch (e) {
         const wait = Math.random() * 1000
         await sleep(wait)
       }
@@ -85,25 +85,25 @@ class Session {
     return data
   }
 
-  search (node_id = 'start', secret = '') {
+  search (nodeID = 'start', secret = '') {
     return new Promise((resolve, reject) => {
-      this.stack = node_id
-      this.get_node(node_id).then(data => {
+      this.stack = nodeID
+      this.getNode(nodeID).then(data => {
         if (data.hasOwnProperty('secret')) {
           resolve(data['secret'])
         }
 
-        let child_promises = []
+        let childPromises = []
 
         if (data.hasOwnProperty('next')) {
           for (let id of data['next']) {
             if (!this.stack.includes(id)) {
-              child_promises.push(this.search(id, secret))
+              childPromises.push(this.search(id, secret))
             }
           }
         }
 
-        Promise.all(child_promises)
+        Promise.all(childPromises)
           .then(letters => {
             for (let letter of letters) {
               secret += letter
@@ -116,4 +116,4 @@ class Session {
 }
 
 const sess = new Session()
-sess.get_session()
+sess.getSession()
