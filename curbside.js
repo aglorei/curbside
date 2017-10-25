@@ -3,7 +3,7 @@
 const https = require('https')
 const hostname = 'challenge.curbside.com'
 
-const fetch = (path, headers = {}) => {
+function fetch (path, headers = {}) {
   return new Promise((resolve, reject) => {
     const options = {
       headers: headers,
@@ -37,83 +37,70 @@ const fetch = (path, headers = {}) => {
   })
 }
 
-const sleep = (ms) => {
+function sleep (ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-class Session {
-  constructor () {
-    this._stack = []
-    this._secret = ''
-  }
-
-  get stack () { return this._stack }
-  set stack (nodeID) { this._stack.push(nodeID) }
-
-  async getSession () {
-    const data = await fetch('get-session')
-    this.session = data['session']
-    this.expire_at = data['expire_at']
-    this.headers = {Session: this.session}
-    this.search().then(secret => {
-      console.log(secret)
-    })
-  }
-
-  async getNode (nodeID) {
-    let data
-    let success = false
-
-    while (!success) {
-      try {
-        data = await fetch(nodeID, this.headers)
-        success = true
-      } catch (e) {
-        const wait = Math.random() * 1000
-        await sleep(wait)
-      }
-    }
-
-    Object.keys(data).map(key => {
-      data[key.toLowerCase()] = data[key]
-    })
-
-    if (data.hasOwnProperty('next') && !Array.isArray(data['next'])) {
-      data['next'] = Array(data['next'])
-    }
-
-    return data
-  }
-
-  search (nodeID = 'start', secret = '') {
-    return new Promise((resolve, reject) => {
-      this.stack = nodeID
-      this.getNode(nodeID).then(data => {
-        if (data.hasOwnProperty('secret')) {
-          resolve(data['secret'])
-        }
-
-        let childPromises = []
-
-        if (data.hasOwnProperty('next')) {
-          for (let id of data['next']) {
-            if (!this.stack.includes(id)) {
-              childPromises.push(this.search(id, secret))
-            }
-          }
-        }
-
-        Promise.all(childPromises)
-          .then(letters => {
-            for (let letter of letters) {
-              secret += letter
-            }
-            resolve(secret)
-          })
-      })
-    })
-  }
+async function getSecret () {
+  const sessionData = await fetch('get-session')
+  const headers = {Session: sessionData['session']}
+  search('start', headers).then(secret => {
+    console.log(secret)
+  })
 }
 
-const sess = new Session()
-sess.getSession()
+async function getNode (nodeID, headers) {
+  let data
+  let success = false
+
+  while (!success) {
+    try {
+      data = await fetch(nodeID, headers)
+      success = true
+    } catch (e) {
+      const wait = Math.random() * 1000
+      await sleep(wait)
+    }
+  }
+
+  return normalizeData(data)
+}
+
+function normalizeData (data) {
+  Object.keys(data).map(key => {
+    data[key.toLowerCase()] = data[key]
+  })
+
+  if (data.hasOwnProperty('next') && !Array.isArray(data['next'])) {
+    data['next'] = Array(data['next'])
+  }
+
+  return data
+}
+
+function search (nodeID, headers, secret = '') {
+  return new Promise((resolve, reject) => {
+    getNode(nodeID, headers).then(data => {
+      if (data.hasOwnProperty('secret')) {
+        resolve(data['secret'])
+        return
+      }
+
+      let childPromises = []
+
+      for (let nextId of data['next']) {
+        childPromises.push(search(nextId, headers, secret))
+      }
+
+      Promise.all(childPromises)
+        .then(letters => {
+          for (let letter of letters) {
+            secret += letter
+          }
+          resolve(secret)
+        })
+    })
+  })
+}
+
+getSecret()
